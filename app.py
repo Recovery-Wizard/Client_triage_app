@@ -1,9 +1,11 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import requests
 
-# Simulated AI triage function
+st.title("Client Recovery Triage Tool with Live Resource Lookup")
+
+# AI triage logic
 def triage_client(housing, substance, mental, support):
     if housing == 'Unstable':
         if int(substance) > 7 or int(mental) > 7:
@@ -12,45 +14,53 @@ def triage_client(housing, substance, mental, support):
         return 'Therapy'
     return 'Peer Support'
 
-# Simulated daily updated resource data
-resources = pd.DataFrame([
-    {'name': 'Phoenix Peer Hub', 'type': 'Peer Support', 'zip': '47906', 'county': 'Tippecanoe',
-     'contact': '765-555-1111', 'address': '123 Recovery Way', 'website': 'http://phoenixpeer.org', 'verified': datetime.today().date()},
-    {'name': 'West Lafayette Counseling Center', 'type': 'Therapy', 'zip': '47906', 'county': 'Tippecanoe',
-     'contact': '765-555-2222', 'address': '456 Wellness Blvd', 'website': 'http://wlcc.org', 'verified': datetime.today().date()},
-    {'name': 'Lafayette Housing Outreach', 'type': 'Housing Referral', 'zip': '47906', 'county': 'Tippecanoe',
-     'contact': '765-555-3333', 'address': '789 Shelter Ln', 'website': 'http://housinglaf.org', 'verified': datetime.today().date()},
-    {'name': 'Indy Peer Support Circle', 'type': 'Peer Support', 'zip': '46201', 'county': 'Marion',
-     'contact': '317-555-4444', 'address': '321 Hope St', 'website': 'http://indypeers.org', 'verified': datetime.today().date()},
-    {'name': 'Indy Behavioral Health', 'type': 'Therapy', 'zip': '46201', 'county': 'Marion',
-     'contact': '317-555-5555', 'address': '654 Recovery Rd', 'website': 'http://indytherapy.org', 'verified': datetime.today().date()},
-    {'name': 'Indy Housing Services', 'type': 'Housing Referral', 'zip': '46201', 'county': 'Marion',
-     'contact': '317-555-6666', 'address': '987 Stability Ave', 'website': 'http://indyhousing.org', 'verified': datetime.today().date()},
-])
-
-# Streamlit App
-st.title("Client Recovery Triage Tool")
+# Function to fetch resources using the SAMHSA Treatment Locator API
+def fetch_samhsa_resources(zip_code, service_type):
+    url = f"https://findtreatment.gov/api/facilities?zip={zip_code}&radius=50"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        facilities = data.get('data', [])
+        resource_list = []
+        for facility in facilities:
+            name = facility.get('name')
+            phone = facility.get('phone')
+            address = facility.get('address', {}).get('address1', '')
+            city = facility.get('address', {}).get('city', '')
+            state = facility.get('address', {}).get('state', '')
+            postal_code = facility.get('address', {}).get('postalCode', '')
+            resource_list.append({
+                'Name': name,
+                'Phone': phone,
+                'Address': f"{address}, {city}, {state} {postal_code}"
+            })
+        return pd.DataFrame(resource_list)
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+        return pd.DataFrame()
 
 menu = st.sidebar.selectbox("Choose Access Mode", ["Free Individual Search", "Organization Login"])
 
 if menu == "Free Individual Search":
     st.header("Self-Help Screening Tool")
+    zip_code = st.text_input("Your ZIP Code")
     housing_status = st.selectbox("Housing Stability", ['Stable', 'Unstable'])
     substance_use = st.slider("Substance Use Severity (1-10)", 1, 10)
     mental_health = st.slider("Mental Health Severity (1-10)", 1, 10)
     support_system = st.selectbox("Do You Have a Support System?", ['Yes', 'No'])
 
-    if st.button("Find Support Resources"):
+    if st.button("Find Support Resources") and zip_code:
         support = 1 if support_system == 'Yes' else 0
         predicted_service = triage_client(housing_status, substance_use, mental_health, support)
         st.success(f"Recommended Support Type: {predicted_service}")
 
-        matched = resources[resources['type'] == predicted_service]
-        if not matched.empty:
-            st.write("### Resources Matching Recommendation:")
-            st.dataframe(matched[['name', 'zip', 'contact', 'address', 'website']])
+        st.info("Searching SAMHSA database for nearby treatment providers...")
+        resources_df = fetch_samhsa_resources(zip_code, predicted_service)
+        if not resources_df.empty:
+            st.dataframe(resources_df)
         else:
-            st.warning("No matching resources found for this recommendation.")
+            st.warning("No resources found or unable to fetch data.")
 
 elif menu == "Organization Login":
     st.header("Organization Client Intake")
@@ -60,8 +70,8 @@ elif menu == "Organization Login":
     if st.button("Login"):
         if username == "admin" and password == "admin123":
             st.success("Access Granted")
-
             client_name = st.text_input("Client Name")
+            zip_code = st.text_input("ZIP Code")
             housing_status = st.selectbox("Housing Stability", ['Stable', 'Unstable'], key='org_housing')
             substance_use = st.slider("Substance Use Severity (1-10)", 1, 10, key='org_substance')
             mental_health = st.slider("Mental Health Severity (1-10)", 1, 10, key='org_mental')
@@ -69,16 +79,16 @@ elif menu == "Organization Login":
             goals = st.text_area("Client Goals")
             needs = st.text_area("Client Needs")
 
-            if st.button("Triage Client"):
+            if st.button("Triage Client") and zip_code:
                 support = 1 if support_system == 'Yes' else 0
                 predicted_service = triage_client(housing_status, substance_use, mental_health, support)
                 st.success(f"Recommended Service for {client_name}: {predicted_service}")
 
-                matched = resources[resources['type'] == predicted_service]
-                if not matched.empty:
-                    st.write("### Resources Matching Recommendation:")
-                    st.dataframe(matched[['name', 'zip', 'contact', 'address', 'website']])
+                st.info("Searching SAMHSA database for nearby treatment providers...")
+                resources_df = fetch_samhsa_resources(zip_code, predicted_service)
+                if not resources_df.empty:
+                    st.dataframe(resources_df)
                 else:
-                    st.warning("No matching resources found for this recommendation.")
+                    st.warning("No resources found or unable to fetch data.")
         else:
             st.error("Invalid credentials. Contact support if needed.")
