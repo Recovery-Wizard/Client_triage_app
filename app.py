@@ -72,8 +72,9 @@ if menu == "Free Individual Search":
         st.success(f"Recommended Support Type: {predicted_service}")
 
         matched = services_df[
-            (services_df['Category'] == predicted_service) & 
-            (services_df['Address'].str.contains(county, case=False))
+            (services_df['Category'].str.lower() == predicted_service.lower()) &
+            (services_df['County'].str.lower() == county.lower()) &
+            (services_df['State'].str.lower() == state.lower())
         ]
         if not matched.empty:
             st.write("### Recommended Local Resources:")
