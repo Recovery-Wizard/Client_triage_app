@@ -56,13 +56,18 @@ if menu == "Free Individual Search":
         if not matched.empty:
             st.write("### Recommended Local Resources:")
             for _, row in matched.iterrows():
-                st.markdown(f"**{row['Name']}**
-
-{row['Description']}
-
-_Address: {row['Address']}_  
-_Phone: {row['Phone']}_  
-[Website]({row['Website']})")
+                info = (
+                    f"**{row['Name']}**  
+"
+                    f"{row['Description']}  
+"
+                    f"_Address: {row['Address']}_  
+"
+                    f"_Phone: {row['Phone']}_  
+"
+                    f"[Website]({row['Website']})"
+                )
+                st.markdown(info)
                 st.markdown("---")
         else:
             st.warning("No matching services found in your area.")
